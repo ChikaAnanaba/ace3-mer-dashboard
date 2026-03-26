@@ -160,7 +160,16 @@ class ACE3Engine:
         if isinstance(src, pd.DataFrame):
             df = src
         else:
-            df = pd.read_excel(src, sheet_name="Pmtct-hts")
+            # auto-detect sheet — try known names then fall back to first sheet
+            xl = pd.ExcelFile(src)
+            sheet = xl.sheet_names[0]  # default to first sheet
+            for s in xl.sheet_names:
+                if 'pmtct' in s.lower() and 'hts' in s.lower():
+                    sheet = s
+                    break
+                if 'pmtct' in s.lower() and 'maternal' not in s.lower():
+                    sheet = s
+            df = pd.read_excel(xl, sheet_name=sheet)
         df = parse_dates(df, ['Date Tested for HIV'])
         df = clean_str(df, ['HIV Test Result'])
         df['_age'] = pd.to_numeric(df.get('Age', pd.Series(dtype=float)), errors='coerce')
