@@ -92,7 +92,15 @@ class ACE3Engine:
         if isinstance(src, pd.DataFrame):
             df = src
         else:
-            df = pd.read_excel(src, sheet_name="radet")
+            xl = pd.ExcelFile(src)
+            sheet = xl.sheet_names[0]  # default to first sheet
+            for s in xl.sheet_names:
+                if s.lower() == 'radet':
+                    sheet = s
+                    break
+                if 'radet' in s.lower():
+                    sheet = s
+            df = pd.read_excel(xl, sheet_name=sheet)
         df = parse_dates(df, [
             'ART Start Date (yyyy-mm-dd)', 'Last Pickup Date (yyyy-mm-dd)',
             'Date of Current ViralLoad Result Sample (yyyy-mm-dd)',
@@ -180,7 +188,15 @@ class ACE3Engine:
         if isinstance(src, pd.DataFrame):
             df = src
         else:
-            df = pd.read_excel(src, sheet_name="pmtct-maternal-cohort")
+            xl = pd.ExcelFile(src)
+            sheet = xl.sheet_names[0]
+            for s in xl.sheet_names:
+                if 'maternal' in s.lower():
+                    sheet = s
+                    break
+                if 'pmtct' in s.lower() and 'hts' not in s.lower():
+                    sheet = s
+            df = pd.read_excel(xl, sheet_name=sheet)
         art_col = [c for c in df.columns if 'ART Start' in c][0] if any('ART Start' in c for c in df.columns) else None
         if art_col:
             df[art_col] = pd.to_datetime(df[art_col], errors='coerce')
@@ -196,7 +212,15 @@ class ACE3Engine:
         if isinstance(src, pd.DataFrame):
             df = src
         else:
-            df = pd.read_excel(src, sheet_name="tb")
+            xl = pd.ExcelFile(src)
+            sheet = xl.sheet_names[0]
+            for s in xl.sheet_names:
+                if s.lower() == 'tb':
+                    sheet = s
+                    break
+                if 'tb' in s.lower():
+                    sheet = s
+            df = pd.read_excel(xl, sheet_name=sheet)
         df = parse_dates(df, ['Date of TB Screening', 'Date of TPT Start (yyyy-mm-dd)',
                               'TPT completion date', 'Date of TB Treatment'])
         df = clean_str(df, ['TB Status', 'TPT completion status', 'TB Screening Type',
@@ -208,7 +232,15 @@ class ACE3Engine:
         if isinstance(src, pd.DataFrame):
             df = src
         else:
-            df = pd.read_excel(src, sheet_name="ahd")
+            xl = pd.ExcelFile(src)
+            sheet = xl.sheet_names[0]
+            for s in xl.sheet_names:
+                if s.lower() == 'ahd':
+                    sheet = s
+                    break
+                if 'ahd' in s.lower():
+                    sheet = s
+            df = pd.read_excel(xl, sheet_name=sheet)
         for c in ['ART start date', 'Date of HIV diagnosis', 'Date of last visit']:
             if c in df.columns:
                 df[c] = pd.to_datetime(df[c], errors='coerce')
