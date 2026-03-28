@@ -44,23 +44,13 @@ def build_engine(files: dict) -> ACE3Engine:
 
 
 def assemble(files_q1: dict, files_q2: dict = None,
+             files_q3: dict = None, files_q4: dict = None,
              targets_src=None, quarter_mode='Q1') -> dict:
     """
-    Run engine(s), merge PrEP and targets, return unified results dict.
-
-    Parameters
-    ----------
-    files_q1     : dict of uploaded file objects for Q1
-    files_q2     : dict of uploaded file objects for Q2 (optional)
-    targets_src  : targets file path/object (optional)
-    quarter_mode : 'Q1' | 'Q2' | 'SEMI'
-
-    Returns
-    -------
-    dict with keys: q1, q2, semi, targets, meta
-    Each quarter dict contains all indicator values.
+    Run engine(s), merge PrEP/EAC and targets, return unified results dict.
+    quarter_mode : 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'CUM' | 'ANNUAL'
     """
-    out = {'q1': {}, 'q2': {}, 'semi': {}, 'targets': {}, 'errors': []}
+    out = {'q1':{}, 'q2':{}, 'q3':{}, 'q4':{}, 'semi':{}, 'targets':{}, 'errors':[]}
 
     # ── targets ──────────────────────────────────────────────────────────────
     prog_tgts = {}
@@ -105,11 +95,39 @@ def assemble(files_q1: dict, files_q2: dict = None,
         except Exception as e:
             out['errors'].append(f'Q2 engine error: {e}')
 
-    # ── semi-annual (re-run engine on Q1 files with CUM, then Q2 files) ─────
+    # ── Q3 engine ─────────────────────────────────────────────────────────────
+    if files_q3 and files_q3.get('radet'):
+        try:
+            eng3 = build_engine(files_q3)
+            r3   = eng3.compute(quarter='Q3')
+            prep3 = compute_prep(files_q3['prep'], quarter='Q3') if files_q3.get('prep') else {}
+            eac3  = compute_eac(files_q3['eac'],  quarter='Q3') if files_q3.get('eac')  else {}
+            out['q3'] = _flatten(r3, prep3, eac3, prog_tgts, 'Q3')
+        except Exception as e:
+            out['errors'].append(f'Q3 engine error: {e}')
+
+    # ── Q4 engine ─────────────────────────────────────────────────────────────
+    if files_q4 and files_q4.get('radet'):
+        try:
+            eng4 = build_engine(files_q4)
+            r4   = eng4.compute(quarter='Q4')
+            prep4 = compute_prep(files_q4['prep'], quarter='Q4') if files_q4.get('prep') else {}
+            eac4  = compute_eac(files_q4['eac'],  quarter='Q4') if files_q4.get('eac')  else {}
+            out['q4'] = _flatten(r4, prep4, eac4, prog_tgts, 'Q4')
+        except Exception as e:
+            out['errors'].append(f'Q4 engine error: {e}')
+
+    # ── semi-annual ────────────────────────────────────────────────────────────
     if out['q1'] and out['q2']:
         out['semi'] = _build_semi(out['q1'], out['q2'], prog_tgts)
 
     return out
+
+
+def _int_dict(d):
+    """Convert all values in a dict to plain Python int — prevents numpy int64 crashes."""
+    if not isinstance(d, dict): return {}
+    return {k: int(v) for k, v in d.items()}
 
 
 def _flatten(r: dict, prep: dict, eac: dict, prog_tgts: dict, quarter: str) -> dict:
@@ -151,13 +169,13 @@ def _flatten(r: dict, prep: dict, eac: dict, prog_tgts: dict, quarter: str) -> d
         'TX_CURR_M':      _safe(txc, 'disagg', 'Male'),
         'TX_CURR_LT15':   _safe(txc, 'disagg', '<15'),
         'TX_CURR_BIO':    txc.get('biometric', 0),
-        'TX_CURR_STATE':  txc.get('state', {}),
+        'TX_CURR_STATE':  _int_dict(txc.get('state', {})),
         'TX_NEW':         txn.get('value', 0),
-        'TX_NEW_STATE':   txn.get('state', {}),
+        'TX_NEW_STATE':   _int_dict(txn.get('state', {})),
         # Retention
         'TX_ML':          txml.get('value', 0),
-        'TX_ML_OUTCOMES': txml.get('outcomes', {}),
-        'TX_ML_STATE':    txml.get('state', {}),
+        'TX_ML_OUTCOMES': _int_dict(txml.get('outcomes', {})),
+        'TX_ML_STATE':    _int_dict(txml.get('state', {})),
         'TX_RTT':         rtt.get('value', 0),
         # VL
         'TX_PVLS_D':      pvls_d,
@@ -171,7 +189,7 @@ def _flatten(r: dict, prep: dict, eac: dict, prog_tgts: dict, quarter: str) -> d
         'HTS_TST':        hts.get('value', 0),
         'HTS_TST_POS':    hts.get('pos', 0),
         'HTS_YIELD':      hts.get('yield', 0),
-        'HTS_STATE':      hts.get('state', {}),
+        'HTS_STATE':      _int_dict(hts.get('state', {})),
         'HTS_MODALITY':   hts.get('modality', {}),
         # PMTCT
         'PMTCT_STAT_N':   pmts.get('n', 0),
@@ -185,9 +203,9 @@ def _flatten(r: dict, prep: dict, eac: dict, prog_tgts: dict, quarter: str) -> d
         # TB
         'TB_SCREEN':      tb.get('screened', 0),
         'TB_SCREEN_POS':  tb.get('positive', 0),
-        'TB_PREV_N':      tpt.get('started_radet', 0),
-        'TX_TB_N':        0,  # from radet if available
-        'TB_ART':         0,  # annual indicator
+        'TB_PREV_N':      tpt.get('started_tb', tpt.get('started_radet', 0)),
+        'TX_TB_N':        0,
+        'TB_ART':         0,
         # DSD
         'MMD_3P':         mmd_3p,
         'MMD_6P':         mmd_6p,
@@ -195,7 +213,7 @@ def _flatten(r: dict, prep: dict, eac: dict, prog_tgts: dict, quarter: str) -> d
         # CxCa
         'CXCA_SCRN':      cxca.get('eligible', 0),
         'CXCA_TX':        cxca.get('screened', 0),
-        'CXCA_RESULTS':   cxca.get('results', {}),
+        'CXCA_RESULTS':   _int_dict(cxca.get('results', {})),
         # AHD
         'AHD_SCRN':       ahd.get('total', 0),
         'AHD_CONF':       ahd.get('ahd_yes', 0),
@@ -206,7 +224,7 @@ def _flatten(r: dict, prep: dict, eac: dict, prog_tgts: dict, quarter: str) -> d
         'PrEP_NEW':       pnew,
         'PrEP_CT':        pct_,
         'PrEP_CURR':      pcurr,
-        'PrEP_NEW_STATE': _safe(prep, 'PrEP_NEW', 'state'),
+        'PrEP_NEW_STATE': _int_dict(_safe(prep, 'PrEP_NEW', 'state')),
         'PrEP_NEW_DISAGG':_safe(prep, 'PrEP_NEW', 'disagg'),
         'PrEP_NEW_POP':   _safe(prep, 'PrEP_NEW', 'pop_type'),
         # Quarter label

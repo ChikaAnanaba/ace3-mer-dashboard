@@ -154,22 +154,39 @@ class ACE3Engine:
     def load_hts(self, src, encoding='latin-1'):
         if isinstance(src, pd.DataFrame):
             df = src
-        elif isinstance(src, str):
-            if src.endswith('.csv'):
-                df = pd.read_csv(src, encoding=encoding, low_memory=False)
-            else:
-                df = pd.read_excel(src)
         else:
-            # BytesIO — try excel first, then csv
-            try:
-                df = pd.read_excel(src)
-            except Exception:
+            loaded = False
+            # Try Excel first with sheet auto-detection
+            if hasattr(src, 'seek'):
                 src.seek(0)
-                try:
-                    df = pd.read_csv(src, encoding='latin-1', low_memory=False)
-                except Exception:
+            try:
+                xl = pd.ExcelFile(src)
+                sheet = xl.sheet_names[0]
+                for s in xl.sheet_names:
+                    sl = s.lower()
+                    if 'hts' in sl and 'index' not in sl and 'pmtct' not in sl:
+                        sheet = s
+                        break
+                    if 'hts' in sl:
+                        sheet = s
+                df = pd.read_excel(xl, sheet_name=sheet)
+                loaded = True
+            except Exception:
+                pass
+            # Fallback: CSV
+            if not loaded:
+                if hasattr(src, 'seek'):
                     src.seek(0)
-                    df = pd.read_csv(src, encoding='latin-1', low_memory=False, sep=None, engine='python')
+                try:
+                    df = pd.read_csv(src, encoding=encoding, low_memory=False)
+                    loaded = True
+                except Exception:
+                    if hasattr(src, 'seek'):
+                        src.seek(0)
+                    df = pd.read_csv(src, encoding='utf-8', low_memory=False)
+                    loaded = True
+            if not loaded:
+                raise ValueError('HTS file could not be loaded')
         # Handle date formats
         dcol = 'Date Of HIV Testing (yyyy-mm-dd)'
         if dcol in df.columns:
@@ -612,28 +629,36 @@ class ACE3Engine:
                 'state': by_state(tbs),
             }
 
-            # TPT — unique active patients with TPT Type in TB report
+            # TPT — exact DAX logic:
+            # TPT_Start_Flag: PID exists as Active/Active Restart in RADET AND has TPT Type in TB file
+            # Count distinct PIDs meeting this condition
             active_pids = set(
                 self._valid[self._valid['Current ART Status'].isin(ACTIVE)]['Patient ID']
-                .astype(str).str.strip().str.upper().values
+                .astype(str).str.strip().str.upper()
             )
             self.tb['_pid'] = self.tb['Patient ID'].astype(str).str.strip().str.upper()
             tb_tpt = self.tb[
-                (self.tb['_pid'] != '') & (self.tb['_pid'] != 'NAN') &
+                (self.tb['_pid'] != '') &
+                (self.tb['_pid'] != 'NAN') &
                 (self.tb['_pid'].isin(active_pids)) &
                 (self.tb['TPT Type'].notna()) &
-                (~self.tb['TPT Type'].isin(['', 'nan']))
+                (~self.tb['TPT Type'].astype(str).isin(['', 'nan']))
             ]
-            tpt_unique = tb_tpt['_pid'].nunique()
+            tb_tpt_pids = set(tb_tpt['_pid'])
 
-            # Also from RADET
-            radet_tpt = self._txc[self._txc['Date of TPT Start (yyyy-mm-dd)'].notna()]
-            tpt_coverage = round(len(radet_tpt) / len(txc) * 100, 1) if len(txc) > 0 else 0
+            # Also include active RADET clients with TPT start date (covers gap)
+            radet_tpt_pids = set(
+                self._txc[self._txc['Date of TPT Start (yyyy-mm-dd)'].notna()]['Patient ID']
+                .astype(str).str.strip().str.upper()
+            )
+            # Union of both sources
+            tpt_unique = len(tb_tpt_pids | radet_tpt_pids)
+            tpt_coverage = round(tpt_unique / len(txc) * 100, 1) if len(txc) > 0 else 0
 
             r['TPT'] = {
-                'started_tb': tpt_unique,
-                'started_radet': len(radet_tpt),
-                'coverage': tpt_coverage,
+                'started_tb':    tpt_unique,
+                'started_radet': int(self._txc['Date of TPT Start (yyyy-mm-dd)'].notna().sum()),
+                'coverage':      tpt_coverage,
             }
 
         # ── CXCA ──

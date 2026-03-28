@@ -217,7 +217,7 @@ def _build_alerts(d, q1=None, q2=None):
 # ─────────────────────────────────────────────────────────────────────────────
 def build_dashboard(results, period, quarter_label, quarter_mode):
     q1=results.get('q1',{}); q2=results.get('q2',{})
-    d=results.get('semi') if quarter_mode=='SEMI' else (q2 if quarter_mode=='Q2' else q1)
+    d=results.get('semi') if quarter_mode in ('SEMI','CUM') else (q2 if quarter_mode=='Q2' else q1)
     tgts=results.get('targets',{})
 
     # ── extract all values ───────────────────────────────────────────────────
@@ -277,7 +277,7 @@ def build_dashboard(results, period, quarter_label, quarter_mode):
 
     # Q1 vs Q2
     qoq_html=''
-    if quarter_mode=='SEMI' and q1 and q2:
+    if quarter_mode in ('SEMI','CUM') and q1 and q2:
         def _row(label,k,invert=False):
             v1,v2=q1.get(k,0),q2.get(k,0)
             _,p,c=_chg(v1,v2)
@@ -320,7 +320,7 @@ def build_dashboard(results, period, quarter_label, quarter_mode):
 </tr>"""
 
     alerts=_build_alerts(d,q1 if quarter_mode in ['Q2','SEMI'] else None,
-                            q2 if quarter_mode=='SEMI' else None)
+                            q2 if quarter_mode in ('SEMI','CUM') else None)
 
     html=f"""<!DOCTYPE html>
 <html lang="en">
@@ -908,7 +908,7 @@ new Chart(document.getElementById('cCXCA'),{{
 # ─────────────────────────────────────────────────────────────────────────────
 def build_narrative(results, period, quarter_label, quarter_mode):
     q1=results.get('q1',{}); q2=results.get('q2',{})
-    d=results.get('semi') if quarter_mode=='SEMI' else (q2 if quarter_mode=='Q2' else q1)
+    d=results.get('semi') if quarter_mode in ('SEMI','CUM') else (q2 if quarter_mode=='Q2' else q1)
     tgts=results.get('targets',{})
 
     txc=d.get('TX_CURR',0); fem=d.get('TX_CURR_F',0); lt15=d.get('TX_CURR_LT15',0)
@@ -942,7 +942,7 @@ def build_narrative(results, period, quarter_label, quarter_mode):
 
     # Q-on-Q section
     qoq_sec=''
-    if quarter_mode=='SEMI' and q1 and q2:
+    if quarter_mode in ('SEMI','CUM') and q1 and q2:
         ml1,ml2=q1.get('TX_ML',0),q2.get('TX_ML',0)
         h1,h2=q1.get('HTS_TST',0),q2.get('HTS_TST',0)
         n1,n2=q1.get('TX_NEW',0),q2.get('TX_NEW',0)
@@ -1132,7 +1132,7 @@ def build_narrative(results, period, quarter_label, quarter_mode):
 # ─────────────────────────────────────────────────────────────────────────────
 def build_talking_points(results, period, quarter_label, quarter_mode):
     q1=results.get('q1',{}); q2=results.get('q2',{})
-    d=results.get('semi') if quarter_mode=='SEMI' else (q2 if quarter_mode=='Q2' else q1)
+    d=results.get('semi') if quarter_mode in ('SEMI','CUM') else (q2 if quarter_mode=='Q2' else q1)
     tgts=results.get('targets',{})
 
     txc=d.get('TX_CURR',0); vl_s=d.get('VL_SUPPRESSION',0); vl_c=d.get('VL_COVERAGE',0)
@@ -1175,7 +1175,7 @@ def build_talking_points(results, period, quarter_label, quarter_mode):
 
     # Q-on-Q
     qoq_rows=''
-    if quarter_mode=='SEMI' and q1 and q2:
+    if quarter_mode in ('SEMI','CUM') and q1 and q2:
         def _qr(label,code,k,inv=False):
             v1,v2=q1.get(k,0),q2.get(k,0)
             if not v1 and not v2: return ''

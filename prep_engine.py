@@ -104,9 +104,10 @@ def compute_prep(src, quarter='Q1'):
                   else pd.Series('', index=df.index)
 
     # ── PrEP_NEW ─────────────────────────────────────────────────────────────
-    # New initiation: Visit Type in NEW_VISIT_TYPES AND commencement date in period
-    new_mask_q1 = (visit_type.isin(NEW_VISIT_TYPES)) & (comm_dt >= Q1_START) & (comm_dt <= Q1_END)
-    new_mask_q2 = (visit_type.isin(NEW_VISIT_TYPES)) & (comm_dt >= Q2_START) & (comm_dt <= Q2_END)
+    # New initiation: Date Of Commencement within the reporting period
+    # (Power BI counts all rows with commencement date in period regardless of visit type)
+    new_mask_q1 = (comm_dt >= Q1_START) & (comm_dt <= Q1_END)
+    new_mask_q2 = (comm_dt >= Q2_START) & (comm_dt <= Q2_END)
     new_q1 = df[new_mask_q1]
     new_q2 = df[new_mask_q2]
     new_cum = df[new_mask_q1 | new_mask_q2]
