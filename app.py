@@ -54,21 +54,18 @@ with st.sidebar:
     st.markdown("#### 📅 Reporting Period")
     quarter_mode = st.selectbox(
         "Select quarter",
-        ['Q1', 'Q2', 'Semi-Annual (Q1+Q2)', 'Q3 (placeholder)', 'Annual (placeholder)'],
-        help="Q3 and Annual tabs will activate once those files are uploaded"
+        ['Q1', 'Q2', 'Semi-Annual (Q1+Q2)', 'Q3', 'Annual (Q1–Q4)'],
+        help="Upload the relevant files for the selected period"
     )
 
     PERIOD_MAP = {
-        'Q1':                       ('Oct – Dec 2025', 'FY26 Q1'),
-        'Q2':                       ('Jan – Mar 2026', 'FY26 Q2'),
-        'Semi-Annual (Q1+Q2)':      ('Oct 2025 – Mar 2026', 'FY26 Semi-Annual'),
-        'Q3 (placeholder)':         ('Apr – Jun 2026', 'FY26 Q3'),
-        'Annual (placeholder)':     ('Oct 2025 – Sep 2026', 'FY26 Annual'),
+        'Q1':                       ('Oct – Dec 2025', 'FY26 Q1',          'Q1'),
+        'Q2':                       ('Jan – Mar 2026', 'FY26 Q2',          'Q2'),
+        'Semi-Annual (Q1+Q2)':      ('Oct 2025 – Mar 2026', 'FY26 Semi-Annual', 'CUM'),
+        'Q3':                       ('Apr – Jun 2026', 'FY26 Q3',          'Q3'),
+        'Annual (Q1–Q4)':           ('Oct 2025 – Sep 2026', 'FY26 Annual', 'ANNUAL'),
     }
-    period_str, qlabel = PERIOD_MAP[quarter_mode]
-    qmode_key = 'Q1' if 'Q1' in quarter_mode and 'Q2' not in quarter_mode else \
-                'Q2' if quarter_mode == 'Q2' else \
-                'SEMI' if 'Semi' in quarter_mode else 'Q1'
+    period_str, qlabel, qmode_key = PERIOD_MAP.get(quarter_mode, ('Oct – Dec 2025', 'FY26 Q1', 'Q1'))
 
     st.markdown("---")
     st.markdown("#### 📁 Static Files *(upload once)*")

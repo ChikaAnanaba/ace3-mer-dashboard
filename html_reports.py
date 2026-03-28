@@ -534,8 +534,8 @@ def build_dashboard(results, period, quarter_label, quarter_mode):
     </div>
     <div class="stats" style="margin-top:10px">
       <div class="sb"><div class="sbv">{_n(unsupp)}</div><div class="sbl">Unsuppressed</div></div>
-      <div class="sb"><div class="sbv">{_n(pvls_d)}</div><div class="sbl">VL Resulted</div></div>
-      <div class="sb"><div class="sbv" style="color:var(--red)">{_n(vl_gap)}</div><div class="sbl">Sample Gap</div></div>
+      <div class="sb"><div class="sbv">{_n(pvls_d)}</div><div class="sbl">TX_PVLS_D</div></div>
+      <div class="sb"><div class="sbv" style="color:var(--red)">{_n(vl_gap)}</div><div class="sbl">Pending Samples</div></div>
     </div>
   </div>
   <div class="card">

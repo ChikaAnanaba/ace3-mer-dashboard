@@ -2,11 +2,9 @@
 ACE3 MER Indicator Engine — Final Build
 All logic confirmed against Power BI DAX.
 
-PEPFAR FY26: Oct 1 2025 – Sep 30 2026
-  Q1: Oct 1 – Dec 31
-  Q2: Jan 1 – Mar 31 (current semi-annual submission)
-  Q3: Apr 1 – Jun 30 (placeholder)
-  Q4: Jul 1 – Sep 30 (placeholder)
+PEPFAR fiscal year runs Oct 1 – Sep 30.
+All quarter and FY dates are auto-calculated from today's date.
+No manual date updates needed when FY rolls over.
 """
 import pandas as pd
 import numpy as np
@@ -16,13 +14,37 @@ from dataclasses import dataclass, field
 import warnings
 warnings.filterwarnings('ignore')
 
-FY_START = pd.to_datetime('2025-10-01')
-Q1_START = pd.to_datetime('2025-10-01')
-Q1_END = pd.to_datetime('2025-12-31')
-Q2_START = pd.to_datetime('2026-01-01')
-Q2_END = pd.to_datetime('2026-03-31')
+# ── Auto-calculate PEPFAR FY and all quarters from today ─────────────────────
+def _calc_fy_dates():
+    today = pd.Timestamp.today().normalize()
+    # PEPFAR FY starts Oct 1 — if we're in Oct-Dec, FY year = this calendar year
+    # if we're in Jan-Sep, FY year = last calendar year
+    fy_year = today.year if today.month >= 10 else today.year - 1
+    fy_start  = pd.Timestamp(f'{fy_year}-10-01')
+    q1_start  = pd.Timestamp(f'{fy_year}-10-01')
+    q1_end    = pd.Timestamp(f'{fy_year}-12-31')
+    q2_start  = pd.Timestamp(f'{fy_year+1}-01-01')
+    q2_end    = pd.Timestamp(f'{fy_year+1}-03-31')
+    q3_start  = pd.Timestamp(f'{fy_year+1}-04-01')
+    q3_end    = pd.Timestamp(f'{fy_year+1}-06-30')
+    q4_start  = pd.Timestamp(f'{fy_year+1}-07-01')
+    q4_end    = pd.Timestamp(f'{fy_year+1}-09-30')
+    fy_end    = q4_end
+    return (fy_year, fy_start, fy_end,
+            q1_start, q1_end,
+            q2_start, q2_end,
+            q3_start, q3_end,
+            q4_start, q4_end)
+
+(FY_YEAR,
+ FY_START, FY_END,
+ Q1_START, Q1_END,
+ Q2_START, Q2_END,
+ Q3_START, Q3_END,
+ Q4_START, Q4_END) = _calc_fy_dates()
+
 INVALID = ['Invalid - Duplicates', 'Invalid - Nonexistent', 'Invalid - Biometrical Naive']
-ACTIVE = ['Active', 'Active Restart']
+ACTIVE  = ['Active', 'Active Restart']
 
 
 def parse_dates(df, cols):
@@ -251,15 +273,26 @@ class ACE3Engine:
 
     # ── Compute All ──────────────────────────────────────────
 
-    def compute(self, quarter='Q2'):
-        """Compute all indicators. quarter = 'Q1', 'Q2', 'CUM' (cumulative)"""
+    def compute(self, quarter='Q1'):
+        """
+        Compute all indicators.
+        quarter = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'CUM' | 'ANNUAL'
+        CUM     = semi-annual (Q1+Q2)
+        ANNUAL  = full fiscal year (Q1+Q2+Q3+Q4)
+        """
         r = {}
 
         if quarter == 'Q1':
             q_start, q_end = Q1_START, Q1_END
         elif quarter == 'Q2':
             q_start, q_end = Q2_START, Q2_END
-        else:  # CUM
+        elif quarter == 'Q3':
+            q_start, q_end = Q3_START, Q3_END
+        elif quarter == 'Q4':
+            q_start, q_end = Q4_START, Q4_END
+        elif quarter == 'ANNUAL':
+            q_start, q_end = FY_START, FY_END
+        else:  # CUM = semi-annual Q1+Q2
             q_start, q_end = FY_START, Q2_END
 
         # ── TX_CURR (snapshot — same regardless of quarter) ──
@@ -279,44 +312,56 @@ class ACE3Engine:
             'no_biometric': int(txc['Date Biometrics Enrolled (yyyy-mm-dd)'].isna().sum()),
         }
 
-        # ── TX_NEW (cumulative from FY start always) ──
-        txn_cum = self._valid[
+        # ── TX_NEW ──
+        txn_fy = self._valid[
             (self._valid['ART Start Date (yyyy-mm-dd)'].notna()) &
             (self._valid['ART Start Date (yyyy-mm-dd)'] >= FY_START) &
             (self._valid['Date of Start of Current ART Regimen'].notna()) &
             (self._valid['Date of Start of Current ART Regimen'] >= FY_START)
         ]
-        txn_q1 = txn_cum[txn_cum['ART Start Date (yyyy-mm-dd)'] <= Q1_END]
-        txn_q2 = txn_cum[txn_cum['ART Start Date (yyyy-mm-dd)'] >= Q2_START]
+        art_dt = txn_fy['ART Start Date (yyyy-mm-dd)']
+        txn_q1  = txn_fy[art_dt <= Q1_END]
+        txn_q2  = txn_fy[(art_dt >= Q2_START) & (art_dt <= Q2_END)]
+        txn_q3  = txn_fy[(art_dt >= Q3_START) & (art_dt <= Q3_END)]
+        txn_q4  = txn_fy[(art_dt >= Q4_START) & (art_dt <= Q4_END)]
+        txn_cum = txn_fy[art_dt <= Q2_END]  # semi-annual
 
-        if quarter == 'Q1':
-            txn = txn_q1
-        elif quarter == 'Q2':
-            txn = txn_q2
-        else:
-            txn = txn_cum
+        if quarter == 'Q1':    txn = txn_q1
+        elif quarter == 'Q2':  txn = txn_q2
+        elif quarter == 'Q3':  txn = txn_q3
+        elif quarter == 'Q4':  txn = txn_q4
+        elif quarter == 'ANNUAL': txn = txn_fy
+        else:                  txn = txn_cum  # CUM
 
         r['TX_NEW'] = {
             'value': len(txn), 'cum': len(txn_cum),
             'q1': len(txn_q1), 'q2': len(txn_q2),
+            'q3': len(txn_q3), 'q4': len(txn_q4),
             'disagg': disagg(txn), 'state': by_state(txn),
         }
 
-        # ── TX_PVLS (PBI formula: both sample AND result date within 365 days) ──
-        # Anchored to Q2 end for final submission; during quarter uses Q2_END
-        vl_anchor = Q2_END
-        vl_365 = vl_anchor - pd.Timedelta(days=365)
+        # ── TX_PVLS — rolling 12-month window from today (MER: "past 12 months") ──
+        vl_anchor = pd.Timestamp.today().normalize()
+        vl_365    = vl_anchor - pd.Timedelta(days=365)
         vl_result_col = 'Date of Current ViralLoad Result Sample (yyyy-mm-dd)'
-        vl_sample_col = 'Date of Viral Load Sample Collection (yyyy-mm-dd)'
+        vl_result_date_col = 'Date of Current Viral Load (yyyy-mm-dd)'
 
         pvd = txc[
             (txc[vl_result_col].notna()) &
             (txc[vl_result_col] >= vl_365) &
-            (txc[vl_sample_col].notna()) &
-            (txc[vl_sample_col] >= vl_365) &
-            (txc['_vl'].notna())
+            (txc[vl_result_col] <= vl_anchor) &
+            (txc[vl_result_date_col].notna()) &
+            (txc[vl_result_date_col] >= vl_365) &
+            (txc[vl_result_date_col] <= vl_anchor) &
+            (txc['_vl'].notna() | txc['Current Viral Load (c/ml)'].astype(str).str.strip().str.upper().isin(['<20','<LDL']))
         ]
-        pvn = pvd[pvd['_vl'] < 1000]
+
+        # suppressed: numeric < 1000 OR text value <20 / <LDL
+        vl_text = txc['Current Viral Load (c/ml)'].astype(str).str.strip().str.upper()
+        pvn = pvd[
+            (pvd['_vl'] < 1000) |
+            (vl_text[pvd.index].isin(['<20', '<LDL']))
+        ]
 
         r['TX_PVLS'] = {
             'd': len(pvd), 'n': len(pvn),
@@ -415,52 +460,88 @@ class ACE3Engine:
         sd = self._valid['Date of Current ART Status']
         non_active = ['IIT', 'Died', 'Transferred Out', 'Stopped Treatment']
 
-        ml_cum = self._valid[
+        # full FY window — all exits from Oct 1 to end of latest available quarter
+        ml_fy = self._valid[
             (self._valid['Current ART Status'].isin(non_active)) &
-            (sd >= FY_START) & (sd <= Q2_END)
+            (sd >= FY_START) & (sd <= FY_END)
         ]
-        ml_q1 = ml_cum[sd <= Q1_END]
-        ml_q2 = ml_cum[sd >= Q2_START]
-        ml = ml_cum if quarter == 'CUM' else (ml_q1 if quarter == 'Q1' else ml_q2)
+        ml_q1 = ml_fy[(sd >= Q1_START) & (sd <= Q1_END)]
+        ml_q2 = ml_fy[(sd >= Q2_START) & (sd <= Q2_END)]
+        ml_q3 = ml_fy[(sd >= Q3_START) & (sd <= Q3_END)]
+        ml_q4 = ml_fy[(sd >= Q4_START) & (sd <= Q4_END)]
+        ml_cum = ml_fy[(sd <= Q2_END)]  # semi-annual Q1+Q2
 
-        rtt_cum = self._valid[
+        if quarter == 'Q1':    ml = ml_q1
+        elif quarter == 'Q2':  ml = ml_q2
+        elif quarter == 'Q3':  ml = ml_q3
+        elif quarter == 'Q4':  ml = ml_q4
+        elif quarter == 'ANNUAL': ml = ml_fy
+        else:                  ml = ml_cum  # CUM = semi-annual
+
+        rtt_fy = self._valid[
             (self._valid['Current ART Status'] == 'Active Restart') &
-            (sd >= FY_START) & (sd <= Q2_END)
+            (sd >= FY_START) & (sd <= FY_END)
         ]
-        rtt_q1 = rtt_cum[sd <= Q1_END]
-        rtt_q2 = rtt_cum[sd >= Q2_START]
-        rtt = rtt_cum if quarter == 'CUM' else (rtt_q1 if quarter == 'Q1' else rtt_q2)
+        rtt_q1 = rtt_fy[(sd >= Q1_START) & (sd <= Q1_END)]
+        rtt_q2 = rtt_fy[(sd >= Q2_START) & (sd <= Q2_END)]
+        rtt_q3 = rtt_fy[(sd >= Q3_START) & (sd <= Q3_END)]
+        rtt_q4 = rtt_fy[(sd >= Q4_START) & (sd <= Q4_END)]
+        rtt_cum = rtt_fy[(sd <= Q2_END)]
+
+        if quarter == 'Q1':    rtt = rtt_q1
+        elif quarter == 'Q2':  rtt = rtt_q2
+        elif quarter == 'Q3':  rtt = rtt_q3
+        elif quarter == 'Q4':  rtt = rtt_q4
+        elif quarter == 'ANNUAL': rtt = rtt_fy
+        else:                  rtt = rtt_cum
 
         r['TX_ML'] = {
             'value': len(ml), 'cum': len(ml_cum), 'q1': len(ml_q1), 'q2': len(ml_q2),
+            'q3': len(ml_q3), 'q4': len(ml_q4),
             'outcomes': ml['Current ART Status'].value_counts().to_dict(),
             'state': by_state(ml), 'disagg': disagg(ml),
         }
         r['TX_RTT'] = {
             'value': len(rtt), 'cum': len(rtt_cum), 'q1': len(rtt_q1), 'q2': len(rtt_q2),
+            'q3': len(rtt_q3), 'q4': len(rtt_q4),
             'state': by_state(rtt), 'disagg': disagg(rtt),
         }
 
         # ── HTS_TST ──
         if self.hts is not None:
-            hts_cum = self.hts[(self.hts['_td'].notna()) & (self.hts['_td'] >= FY_START)]
-            hts_q1 = hts_cum[hts_cum['_td'] <= Q1_END]
-            hts_q2 = hts_cum[hts_cum['_td'] >= Q2_START]
-            h = hts_cum if quarter == 'CUM' else (hts_q1 if quarter == 'Q1' else hts_q2)
+            hts_fy  = self.hts[(self.hts['_td'].notna()) & (self.hts['_td'] >= FY_START)]
+            hts_q1  = hts_fy[hts_fy['_td'] <= Q1_END]
+            hts_q2  = hts_fy[(hts_fy['_td'] >= Q2_START) & (hts_fy['_td'] <= Q2_END)]
+            hts_q3  = hts_fy[(hts_fy['_td'] >= Q3_START) & (hts_fy['_td'] <= Q3_END)]
+            hts_q4  = hts_fy[(hts_fy['_td'] >= Q4_START) & (hts_fy['_td'] <= Q4_END)]
+            hts_cum = hts_fy[hts_fy['_td'] <= Q2_END]
+
+            if quarter == 'Q1':    h = hts_q1
+            elif quarter == 'Q2':  h = hts_q2
+            elif quarter == 'Q3':  h = hts_q3
+            elif quarter == 'Q4':  h = hts_q4
+            elif quarter == 'ANNUAL': h = hts_fy
+            else:                  h = hts_cum  # CUM
+
             hp = h[h['Final HIV Test Result'] == 'Positive']
 
             mod = h['Modality'].value_counts().to_dict() if 'Modality' in h.columns else {}
-            # Yield by modality
             mod_yield = {}
             for m, cnt in mod.items():
                 pos = int((h[h['Modality'] == m]['Final HIV Test Result'] == 'Positive').sum())
                 mod_yield[m] = {'tested': cnt, 'pos': pos,
                                 'yield': round(pos / cnt * 100, 2) if cnt > 0 else 0}
 
-            st_col = 'State Of Residence' if 'State Of Residence' in h.columns else 'State'
+            PROGRAMME_STATES = ['Kebbi', 'Sokoto', 'Zamfara']
+            st_col = 'State' if 'State' in h.columns else 'State Of Residence'
+            if st_col in h.columns:
+                h  = h[h[st_col].isin(PROGRAMME_STATES)]
+                hp = hp[hp[st_col].isin(PROGRAMME_STATES)]
+
             r['HTS_TST'] = {
                 'value': len(h), 'pos': len(hp), 'cum': len(hts_cum),
                 'q1': len(hts_q1), 'q2': len(hts_q2),
+                'q3': len(hts_q3), 'q4': len(hts_q4),
                 'yield': round(len(hp) / len(h) * 100, 2) if len(h) > 0 else 0,
                 'modality': mod_yield,
                 'disagg': disagg(h), 'disagg_pos': disagg(hp),
@@ -469,23 +550,34 @@ class ACE3Engine:
 
         # ── PMTCT_STAT ──
         if self.pmtct_hts is not None:
-            pn_cum = self.pmtct_hts[
+            pn_fy  = self.pmtct_hts[
                 (self.pmtct_hts['Date Tested for HIV'].notna()) &
                 (self.pmtct_hts['Date Tested for HIV'] >= FY_START)
             ]
-            pn_q1 = pn_cum[pn_cum['Date Tested for HIV'] <= Q1_END]
-            pn_q2 = pn_cum[pn_cum['Date Tested for HIV'] >= Q2_START]
-            pn = pn_cum if quarter == 'CUM' else (pn_q1 if quarter == 'Q1' else pn_q2)
+            pt = pn_fy['Date Tested for HIV']
+            pn_q1  = pn_fy[pt <= Q1_END]
+            pn_q2  = pn_fy[(pt >= Q2_START) & (pt <= Q2_END)]
+            pn_q3  = pn_fy[(pt >= Q3_START) & (pt <= Q3_END)]
+            pn_q4  = pn_fy[(pt >= Q4_START) & (pt <= Q4_END)]
+            pn_cum = pn_fy[pt <= Q2_END]
+
+            if quarter == 'Q1':    pn = pn_q1
+            elif quarter == 'Q2':  pn = pn_q2
+            elif quarter == 'Q3':  pn = pn_q3
+            elif quarter == 'Q4':  pn = pn_q4
+            elif quarter == 'ANNUAL': pn = pn_fy
+            else:                  pn = pn_cum  # CUM
+
             pp = pn[pn['HIV Test Result'] == 'Positive']
 
-            # modality breakdown
-            mod_anc1 = len(pn[pn.get('Modality', pd.Series(dtype=str)).str.contains('ANC1 Only', na=False)]) if 'Modality' in pn.columns else len(pn)
-            mod_post = len(pn[pn.get('Modality', pd.Series(dtype=str)).str.contains('Post ANC1', na=False)]) if 'Modality' in pn.columns else 0
-            mod_bf   = len(pn[pn.get('Modality', pd.Series(dtype=str)).str.contains('Breastfeeding', na=False)]) if 'Modality' in pn.columns else 0
+            mod_anc1 = len(pn[pn['Modality'].str.contains('ANC1 Only', na=False)]) if 'Modality' in pn.columns else len(pn)
+            mod_post = len(pn[pn['Modality'].str.contains('Post ANC1', na=False)]) if 'Modality' in pn.columns else 0
+            mod_bf   = len(pn[pn['Modality'].str.contains('Breastfeeding', na=False)]) if 'Modality' in pn.columns else 0
 
             r['PMTCT_STAT'] = {
                 'n': len(pn), 'pos': len(pp), 'cum': len(pn_cum),
                 'q1': len(pn_q1), 'q2': len(pn_q2),
+                'q3': len(pn_q3), 'q4': len(pn_q4),
                 'positivity': round(len(pp) / len(pn) * 100, 3) if len(pn) > 0 else 0,
                 'state': by_state(pn),
                 'anc1': mod_anc1, 'post_anc': mod_post, 'breastfeeding': mod_bf,

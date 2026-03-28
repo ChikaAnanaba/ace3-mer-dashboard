@@ -77,19 +77,21 @@ def assemble(files_q1: dict, files_q2: dict = None,
     if files_q1.get('radet'):
         try:
             eng1 = build_engine(files_q1)
-            r1   = eng1.compute(quarter='Q1')
+            # map quarter_mode to engine quarter key
+            eng_q = quarter_mode if quarter_mode in ['Q1','Q2','Q3','Q4','ANNUAL'] else 'Q1'
+            r1   = eng1.compute(quarter=eng_q)
             prep1 = {}
             if files_q1.get('prep'):
-                prep1 = compute_prep(files_q1['prep'], quarter='Q1')
+                prep1 = compute_prep(files_q1['prep'], quarter=eng_q)
             eac1 = {}
             if files_q1.get('eac'):
-                eac1 = compute_eac(files_q1['eac'], quarter='Q1')
-            out['q1'] = _flatten(r1, prep1, eac1, prog_tgts, 'Q1')
+                eac1 = compute_eac(files_q1['eac'], quarter=eng_q)
+            out['q1'] = _flatten(r1, prep1, eac1, prog_tgts, eng_q)
         except Exception as e:
             out['errors'].append(f'Q1 engine error: {e}')
 
-    # ── Q2 engine ────────────────────────────────────────────────────────────
-    if files_q2 and files_q2.get('radet'):
+    # ── Q2 engine (only for semi-annual) ─────────────────────────────────────
+    if files_q2 and files_q2.get('radet') and quarter_mode == 'CUM':
         try:
             eng2 = build_engine(files_q2)
             r2   = eng2.compute(quarter='Q2')
