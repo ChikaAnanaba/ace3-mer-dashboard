@@ -87,7 +87,7 @@ with st.sidebar:
     prep_q1   = st.file_uploader("PrEP",              type=['xlsx'], key='prep1')
     eac_q1    = st.file_uploader("EAC",               type=['xlsx'], key='eac1')
 
-    if 'Semi' in quarter_mode or quarter_mode == 'Q2':
+    if 'Semi' in quarter_mode or quarter_mode in ['Q2', 'Semi-Annual (Q1+Q2)']:
         st.markdown("#### 📂 Q2 Files")
         radet_q2   = st.file_uploader("RADET (Q2)",         type=['xlsx'], key='r2')
         hts_q2     = st.file_uploader("HTS (Q2)",            type=['xlsx','csv'], key='h2')
@@ -121,7 +121,7 @@ st.markdown(f"""
 if run_btn:
     if not radet_q1:
         st.error("⚠ Q1 RADET file is required to generate reports.")
-    elif ('Semi' in quarter_mode or quarter_mode == 'Q2') and not radet_q2:
+    elif ('Semi' in quarter_mode or quarter_mode in ['Q2', 'Semi-Annual (Q1+Q2)']) and not radet_q2:
         st.error("⚠ Q2 RADET file is required for this period selection.")
     else:
         with st.spinner("Running ACE3 engine — please wait..."):
@@ -149,13 +149,22 @@ if run_btn:
                 st.session_state.quarter_mode = qmode_key
                 st.session_state.period = period_str
                 st.session_state.quarter_label = qlabel
-                st.session_state.outputs_ready = True
+
+                # only mark ready if we actually have results
+                has_data = bool(results.get('q1')) or bool(results.get('semi'))
+                st.session_state.outputs_ready = has_data
 
                 if results.get('errors'):
                     for e in results['errors']:
                         st.warning(f"⚠ {e}")
-                else:
+
+                if has_data:
                     st.success("✓ Engine complete — reports ready below")
+                else:
+                    st.error("⚠ Engine ran but no results were produced. Check that your RADET file is correct and the sheet name contains 'radet'.")
+                    # show full error list
+                    for e in results.get('errors', []):
+                        st.code(e)
             except Exception as ex:
                 st.error(f"Engine error: {ex}")
                 st.code(traceback.format_exc())
@@ -167,12 +176,15 @@ if st.session_state.outputs_ready and st.session_state.results:
     period  = st.session_state.period
     qlabel  = st.session_state.quarter_label
 
-    d = results.get('semi') if qmode=='SEMI' else \
-        results.get('q2')   if qmode=='Q2'  else results.get('q1',{})
+    d = results.get('semi') if qmode=='CUM' else results.get('q1', {})
     tgts = results.get('targets', {})
 
     if not d:
-        st.warning("No results available for the selected quarter.")
+        st.error("⚠ No results found. The engine may have encountered an error loading your files.")
+        if results.get('errors'):
+            st.markdown("**Engine errors:**")
+            for e in results['errors']:
+                st.code(e)
         st.stop()
 
     # helper
@@ -223,7 +235,7 @@ if st.session_state.outputs_ready and st.session_state.results:
     # ── DASHBOARD TABS ────────────────────────────────────────────────────────
     tab_labels = ["📊 Dashboard", "🎯 Targets", "📈 VL & Retention",
                   "🧪 Testing & PMTCT", "💊 PrEP", "🏥 AHD & CxCa"]
-    if qmode == 'SEMI':
+    if qmode == 'CUM':
         tab_labels.insert(1, "🔄 Q1 vs Q2")
 
     tabs = st.tabs(tab_labels)
@@ -292,7 +304,7 @@ if st.session_state.outputs_ready and st.session_state.results:
             st.plotly_chart(fig4, use_container_width=True)
 
     # Q1 vs Q2 TAB (semi-annual only)
-    if qmode == 'SEMI':
+    if qmode == 'CUM':
         with tabs[tab_idx]:
             tab_idx += 1
             q1d = results.get('q1',{}); q2d = results.get('q2',{})
