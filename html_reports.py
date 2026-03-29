@@ -6,6 +6,11 @@ No mention of PEPFAR or USAID anywhere.
 """
 import json
 
+def _safe(n, d, dec=1):
+    """Safe percentage — never divides by zero."""
+    if not d or d == 0: return 0
+    return round(n / d * 100, dec)
+
 # ── shared base CSS ───────────────────────────────────────────────────────────
 BASE_CSS = """<style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;600&display=swap');
@@ -353,7 +358,7 @@ def build_dashboard(results, period, quarter_label, quarter_mode):
   <div class="kpi navy">
     <div class="kpi-lbl">Active on ART<br>TX_CURR</div>
     <div class="kpi-val">{_n(txc)}</div>
-    <div class="kpi-sub">{fem_p:.1f}% female · {lt15/txc*100:.1f}% paediatric</div>
+    <div class="kpi-sub">{fem_p:.1f}% female · {(lt15/txc*100 if txc else 0):.1f}% paediatric</div>
     <span class="badge bb">{bio_p:.1f}% biometric</span>
   </div>
   <div class="kpi red">
@@ -472,7 +477,7 @@ def build_dashboard(results, period, quarter_label, quarter_mode):
 <div class="g32">
   <div class="card">
     <div class="ct">TX_CURR by State &amp; Sex</div>
-    <div class="cs">Total {_n(txc)} · {fem_p:.1f}% female · {lt15/txc*100:.1f}% paediatric · {bio_p:.1f}% biometric</div>
+    <div class="cs">Total {_n(txc)} · {fem_p:.1f}% female · {(lt15/txc*100 if txc else 0):.1f}% paediatric · {bio_p:.1f}% biometric</div>
     <div style="height:210px"><canvas id="cCascade"></canvas></div>
   </div>
   <div class="card">
@@ -481,9 +486,9 @@ def build_dashboard(results, period, quarter_label, quarter_mode):
     <div style="display:flex;gap:12px;align-items:center;margin-top:4px">
       <div style="width:145px;height:145px;flex-shrink:0"><canvas id="cMMD"></canvas></div>
       <div class="leg">
-        <div class="li"><div class="ld" style="background:var(--green)"></div><span class="lt">6+ months</span><span class="lv">{_n(mmd_6p)}</span><span class="lp">{mmd_6p/txc*100:.1f}%</span></div>
-        <div class="li"><div class="ld" style="background:var(--blue)"></div><span class="lt">3–5 months</span><span class="lv">{_n(mmd_35)}</span><span class="lp">{mmd_35/txc*100:.1f}%</span></div>
-        <div class="li"><div class="ld" style="background:var(--red)"></div><span class="lt">&lt;3 months</span><span class="lv">{_n(mmd_lt3)}</span><span class="lp">{mmd_lt3/txc*100:.1f}%</span></div>
+        <div class="li"><div class="ld" style="background:var(--green)"></div><span class="lt">6+ months</span><span class="lv">{_n(mmd_6p)}</span><span class="lp">{(mmd_6p/txc*100 if txc else 0):.1f}%</span></div>
+        <div class="li"><div class="ld" style="background:var(--blue)"></div><span class="lt">3–5 months</span><span class="lv">{_n(mmd_35)}</span><span class="lp">{(mmd_35/txc*100 if txc else 0):.1f}%</span></div>
+        <div class="li"><div class="ld" style="background:var(--red)"></div><span class="lt">&lt;3 months</span><span class="lv">{_n(mmd_lt3)}</span><span class="lp">{(mmd_lt3/txc*100 if txc else 0):.1f}%</span></div>
       </div>
     </div>
     <div style="margin-top:10px">{_progress_bar('MMD ≥3 Months',f'{_n(mmd_3p)} of {_n(txc)} clients',mmd_pct,90)}</div>
@@ -745,7 +750,7 @@ new Chart(document.getElementById('cHTS'),{{
     labels:{json.dumps(mod_labels)},
     datasets:[
       {{label:'Tested',data:{json.dumps(mod_tested)},backgroundColor:'#1F4E79',barPercentage:.4,yAxisID:'y'}},
-      {{label:'Yield %',data:{json.dumps(mod_yield_)},backgroundColor:'#C87000',barPercentage:.4,yAxisID:'y1'}}
+      {{label:'Yield % (HIV+/Tested)',data:{json.dumps(mod_yield_)},backgroundColor:'#C87000',barPercentage:.4,yAxisID:'y1'}}
     ]
   }},
   options:{{
@@ -1050,8 +1055,8 @@ def build_narrative(results, period, quarter_label, quarter_mode):
 
   <div class="report-section">
     <div class="rsh"><div class="rsh-icon">4</div>Active Treatment Cohort &amp; DSD</div>
-    <p class="report-p">As of {period}, <strong>{_n(txc)} clients are active on ART</strong> across 37 facilities ({fem_p:.1f}% female, {lt15/txc*100:.1f}% paediatric, {bio_p:.1f}% biometrically enrolled).
-    <strong>{_p(mmd_p)}</strong> of clients ({_n(mmd_3p)}) are on multi-month dispensing of ≥3 months, with {_p(mmd_6p/txc*100 if txc else 0)} on a 6-month supply — {'exceeding' if mmd_p>=90 else 'approaching'} the 90% DSD threshold.</p>
+    <p class="report-p">As of {period}, <strong>{_n(txc)} clients are active on ART</strong> across 37 facilities ({fem_p:.1f}% female, {(lt15/txc*100 if txc else 0):.1f}% paediatric, {bio_p:.1f}% biometrically enrolled).
+    <strong>{_p(mmd_p)}</strong> of clients ({_n(mmd_3p)}) are on multi-month dispensing of ≥3 months, with {_p((mmd_6p/txc*100 if txc else 0) if txc else 0)} on a 6-month supply — {'exceeding' if mmd_p>=90 else 'approaching'} the 90% DSD threshold.</p>
     {'<div class="highlight"><strong>Achievement:</strong> MMD coverage at ' + _p(mmd_p) + ' reflects full operationalisation of differentiated service delivery.</div>' if mmd_p>=90 else ''}
   </div>
 

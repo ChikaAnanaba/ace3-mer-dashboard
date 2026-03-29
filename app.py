@@ -6,7 +6,6 @@ import io, traceback
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 st.set_page_config(
     page_title='ACE3 Report Generator',
@@ -387,45 +386,59 @@ if st.session_state.outputs_ready and st.session_state.results:
             fig_pos.update_layout(**CHART_CFG, height=300)
             st.plotly_chart(fig_pos, use_container_width=True)
 
-        # Modality chart
+        # Modality chart — horizontal bars + yield badge (Statista style)
         hts_mod = d.get('HTS_MODALITY',{})
         if hts_mod:
             st.markdown("##### HTS by Modality — Volume & Yield")
-            mod_labels = list(hts_mod.keys())
-            mod_tested = [hts_mod[m].get('tested',0) if isinstance(hts_mod[m],dict) else 0 for m in mod_labels]
-            mod_yield_ = [round(hts_mod[m].get('yield',0),2) if isinstance(hts_mod[m],dict) else 0 for m in mod_labels]
-            mod_pos    = [hts_mod[m].get('pos',0) if isinstance(hts_mod[m],dict) else 0 for m in mod_labels]
+            # Sort by tested volume descending, top 7
+            mod_items = sorted(
+                [(m, v) for m,v in hts_mod.items() if isinstance(v,dict)],
+                key=lambda x: -x[1].get('tested',0)
+            )[:7]
+            mod_labels = [m for m,_ in mod_items]
+            mod_tested = [v.get('tested',0) for _,v in mod_items]
+            mod_yield_ = [round(v.get('pos',0)/v.get('tested',1)*100,1)
+                          if v.get('tested',0)>0 else 0
+                          for _,v in mod_items]
+            mod_pos    = [v.get('pos',0) for _,v in mod_items]
 
-            fig_mod = make_subplots(specs=[[{"secondary_y": True}]])
+            fig_mod = go.Figure()
+            # Colour-code bars by yield level
+            bar_colours = ['#17A550' if y>=2 else ('#F0A500' if y>=1 else '#2B8FD4')
+                           for y in mod_yield_]
             fig_mod.add_trace(go.Bar(
-                name='Tests', x=mod_labels, y=mod_tested,
-                marker_color='#1F4E79',
-                text=[_n(v) for v in mod_tested],
-                textposition='outside', textfont=dict(size=9)
-            ), secondary_y=False)
-            fig_mod.add_trace(go.Scatter(
-                name='Yield %', x=mod_labels, y=mod_yield_,
-                mode='lines+markers',
-                line=dict(color='#BA0C2F', width=2.5),
-                marker=dict(size=8, color='#BA0C2F',
-                            line=dict(color='white',width=1.5))
-            ), secondary_y=True)
-            fig_mod.update_layout(**CHART_CFG, height=340,
-                title=f'HTS by Modality — {_n(hts)} total · {_n(hts_p)} positive',
-                legend=dict(orientation='h',y=1.12,x=0))
-            fig_mod.update_xaxes(showgrid=False, tickangle=-20)
-            fig_mod.update_yaxes(title_text='Tests', gridcolor='#F1F5F9',
-                                  tickformat=',', secondary_y=False)
-            fig_mod.update_yaxes(title_text='Yield %', ticksuffix='%',
-                                  showgrid=False, secondary_y=True)
+                name='Tested', y=mod_labels, x=mod_tested,
+                orientation='h',
+                marker_color=bar_colours,
+                text=[f"{_n(v)}  |  Yield: {y:.1f}%"
+                      for v,y in zip(mod_tested, mod_yield_)],
+                textposition='inside',
+                insidetextanchor='end',
+                textfont=dict(size=11, color='white', family='IBM Plex Mono')
+            ))
+            fig_mod.update_layout(
+                **{k:v for k,v in CHART_CFG.items() if k != 'showlegend'},
+                height=max(280, len(mod_labels)*52),
+                title=dict(
+                    text=f'<b>HIV Testing by Modality</b>  ·  {_n(hts)} total tests  ·  Yield = HIV+ / Tested',
+                    font=dict(size=13)
+                ),
+                showlegend=False,
+                margin=dict(t=52, b=28, l=180, r=80),
+                yaxis=dict(autorange='reversed', showgrid=False,
+                           tickfont=dict(size=11)),
+                xaxis=dict(showgrid=True, gridcolor='#F1F5F9',
+                           tickformat=',', title='Tests')
+            )
             st.plotly_chart(fig_mod, use_container_width=True)
 
+            # Summary table
             mod_df = pd.DataFrame([{
                 'Modality': m,
-                'Tested': _n(hts_mod[m].get('tested',0) if isinstance(hts_mod[m],dict) else 0),
-                'HIV+': _n(hts_mod[m].get('pos',0) if isinstance(hts_mod[m],dict) else 0),
-                'Yield %': f"{hts_mod[m].get('yield',0):.2f}%" if isinstance(hts_mod[m],dict) else '0.00%'
-            } for m in mod_labels])
+                'Tested': _n(v.get('tested',0)),
+                'HIV+': _n(v.get('pos',0)),
+                'Yield %': f"{(v.get('pos',0)/v.get('tested',1)*100 if v.get('tested',0) else 0):.1f}%"
+            } for m,v in mod_items])
             st.dataframe(mod_df, hide_index=True, use_container_width=True)
         else:
             st.info("Upload the HTS file to see modality breakdown and yield by modality.")
