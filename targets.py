@@ -44,3 +44,19 @@ def load_targets(src):
                 pass
 
     return df, {}, prog_tgts
+
+# INDICATOR_META — used by app.py for targets display
+INDICATOR_META = {
+    'TX_CURR':      {'label': 'Active on ART',          'freq': 'Quarterly',    'snapshot': True},
+    'TX_NEW':       {'label': 'New ART Initiations',     'freq': 'Quarterly',    'snapshot': False},
+    'HTS_TST':      {'label': 'HIV Tests',               'freq': 'Quarterly',    'snapshot': False},
+    'HTS_TST_POS':  {'label': 'HIV Positive Results',    'freq': 'Quarterly',    'snapshot': False},
+    'TX_PVLS_D':    {'label': 'VL Tests Resulted',       'freq': 'Quarterly',    'snapshot': False},
+    'TX_PVLS_N':    {'label': 'VL Suppressed',           'freq': 'Quarterly',    'snapshot': False},
+    'PMTCT_STAT_N': {'label': 'ANC Clients Tested',      'freq': 'Quarterly',    'snapshot': False},
+    'PMTCT_ART_D':  {'label': 'PMTCT on ART',            'freq': 'Quarterly',    'snapshot': False},
+    'PrEP_NEW':     {'label': 'PrEP New Initiations',    'freq': 'Quarterly',    'snapshot': False},
+    'TB_PREV_N':    {'label': 'TPT Completed',           'freq': 'Semi-Annual',  'snapshot': False},
+    'TX_TB_N':      {'label': 'TB/HIV on ART',           'freq': 'Semi-Annual',  'snapshot': False},
+    'TB_ART':       {'label': 'TB Patients on ART',      'freq': 'Annual',       'snapshot': False},
+}
